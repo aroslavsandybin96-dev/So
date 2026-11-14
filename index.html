@@ -126,7 +126,7 @@ function render(){
   const [y,m]=mo.split('-').map(Number);const dim=new Date(y,m,0).getDate();
   const rs=R.filter(r=>r.date&&r.date.startsWith(mo)).sort((a,b)=>b.date.localeCompare(a.date)||b.ts-a.ts);
   const sales=rs.reduce((s,r)=>s+r.amount,0),earn=rs.reduce((s,r)=>s+r.e,0);
-  const wd=D.filter(x=>x.w&&x.id.startsWith(mo)),dn=iso(now),wdd=wd.filter(x=>x.id<=dn),base=wdd.reduce((s,x)=>s+x.p,0),adj=J.filter(x=>x.date&&x.date.startsWith(mo)),adjS=adj.reduce((s,x)=>s+x.a,0);
+  const wd=D.filter(x=>x.w&&x.id.startsWith(mo)),dn=iso(now),wdd=wd,base=wdd.reduce((s,x)=>s+x.p,0),adj=J.filter(x=>x.date&&x.date.startsWith(mo)),adjS=adj.reduce((s,x)=>s+x.a,0);
   const byDay=Array(dim).fill(0);rs.forEach(r=>byDay[+r.date.slice(8)-1]+=Math.max(r.amount,0));
   const mx=Math.max(...byDay,1),td=iso(now).startsWith(mo)?now.getDate():-1;
   const avg=rs.length?sales/rs.length:0;
@@ -221,7 +221,7 @@ async function tryPin(){const v=$('#pin').value.trim();if(v.length<6)return $('#
 document.addEventListener('click',e=>{if(e.target.closest('#pk'))tryPin()});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='pin')tryPin()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&unlocked){unlocked=false;if(tab==='a')render()}});
-function cal(y,m,wd,byDay){const dn=iso(now),done=wd.filter(x=>x.id<=dn),pl=wd.length-done.length,set=new Set(wd.map(x=>x.id)),first=(new Date(y,m-1,1).getDay()+6)%7,dim=new Date(y,m,0).getDate();
+function cal(y,m,wd,byDay){const dn=iso(now),done=wd,pl=wd.length-done.length,set=new Set(wd.map(x=>x.id)),first=(new Date(y,m-1,1).getDay()+6)%7,dim=new Date(y,m,0).getDate();
   let c='<div class="cal"><div class="wk">'+['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d=>`<span>${d}</span>`).join('')+'</div><div class="gd">'+'<i></i>'.repeat(first);
   for(let d=1;d<=dim;d++){const id=y+'-'+pad(m)+'-'+pad(d);c+=`<button data-d="${id}" class="${set.has(id)?(id<=dn?'w':'p'):''} ${id===dn?'t':''}">${d}${byDay[d-1]>0?'<u></u>':''}</button>`}
   return c+`</div><div class="cn"><b>${done.length}</b> раб. дн. · +${money(done.reduce((s,x)=>s+x.p,0))}${pl?` · запланировано ещё ${pl}`:''}</div><small>Нажмите на число, чтобы отметить рабочий день</small></div>`}
@@ -232,9 +232,9 @@ const dm=s=>s.slice(8)+'.'+s.slice(5,7);
 function adjHtml(adj,s){return `<div class="sec"><span>Премии, штрафы, чаевые</span><span>${s>0?'+':''}${money(s)}</span></div>`+adj.sort((a,b)=>b.ts-a.ts).map(x=>`<div class="row" data-a="${x.id}"><div class="dot">${x.k==='fine'?'⚠️':x.k==='tip'?'💝':'🎁'}</div><div class="l"><div class="a">${KN[x.k]}</div><div class="n">${esc(x.note)||'—'} · ${dm(x.date)}</div></div><div class="e ${x.a<0?'neg':''}">${x.a>0?'+':''}${money(x.a)}</div></div>`).join('')+'<button class="wide" id="adda">＋ Премия, штраф или чаевые</button>'}
 function viewO(){const td=iso(now),L=O.slice().sort((a,b)=>(a.done-b.done)||(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
   return `<div class="top"><h1>Заказы 💐</h1></div><button class="wide" id="addo">＋ Новый заказ</button>`+(L.length?L.map((o,i)=>{const late=!o.done&&o.date<td;return `<div class="row" data-o="${o.id}" style="animation-delay:${Math.min(i,12)*30}ms;${o.done?'opacity:.5':''}"><button class="dot" data-od="${o.id}" style="border:0;cursor:pointer">${o.done?'✅':'⬜'}</button><div class="l"><div class="a" style="${o.done?'text-decoration:line-through':''}">${esc(o.title)}</div><div class="n" style="${late?'color:var(--bad)':''}">${o.date===td?'сегодня':dm(o.date)}${o.time?' · '+o.time:''}${late?' · просрочен':''}</div></div>${o.sum?`<div class="e">${money(o.sum)}</div>`:''}</div>`}).join(''):'<div class="empty">Заказов нет. Добавьте букет на дату и время 🌹</div>')}
-function calc(k){const dn=iso(now),rs=R.filter(r=>r.date&&r.date.startsWith(k)),wd=D.filter(x=>x.w&&x.id.startsWith(k)&&x.id<=dn),ad=J.filter(x=>x.date&&x.date.startsWith(k)).reduce((s,x)=>s+x.a,0),e=rs.reduce((s,r)=>s+r.e,0),b=wd.reduce((s,x)=>s+x.p,0),by={};rs.forEach(r=>by[r.date]=(by[r.date]||0)+r.amount);
+function calc(k){const dn=iso(now),rs=R.filter(r=>r.date&&r.date.startsWith(k)),wd=D.filter(x=>x.w&&x.id.startsWith(k)),ad=J.filter(x=>x.date&&x.date.startsWith(k)).reduce((s,x)=>s+x.a,0),e=rs.reduce((s,r)=>s+r.e,0),b=wd.reduce((s,x)=>s+x.p,0),by={};rs.forEach(r=>by[r.date]=(by[r.date]||0)+r.amount);
   const sales=rs.reduce((s,r)=>s+r.amount,0);return{n:rs.length,sales,e,b,ad,t:e+b+ad,days:wd.length,avg:rs.length?sales/rs.length:0,bd:Object.entries(by).sort((a,b)=>b[1]-a[1])[0]}}
-function viewS(){const cur=calc(mo),[y,m]=mo.split('-').map(Number),pv=calc(iso(new Date(y,m-2,1)).slice(0,7)),pl=D.filter(x=>x.w&&x.id.startsWith(mo)&&x.id>iso(now)).length,fc=cur.t+pl*(S.day+(cur.days?cur.e/cur.days:0)),g=S.goal||0,
+function viewS(){const cur=calc(mo),[y,m]=mo.split('-').map(Number),pv=calc(iso(new Date(y,m-2,1)).slice(0,7)),pl=D.filter(x=>x.w&&x.id.startsWith(mo)&&x.id>iso(now)).length,fc=cur.t+pl*(D.filter(x=>x.w&&x.id.startsWith(mo)&&x.id<=iso(now)).length?cur.e/D.filter(x=>x.w&&x.id.startsWith(mo)&&x.id<=iso(now)).length:0),g=S.goal||0,
   ks=[...Array(6)].map((_,i)=>iso(new Date(y,m-6+i,1)).slice(0,7)),vs=ks.map(k=>calc(k).t),mx=Math.max(...vs,1),dl=pv.t?Math.round((cur.t-pv.t)/pv.t*100):null;
   return `<div class="top"><h1>Итоги 📊</h1><div class="mn"><button data-m="-1">‹</button><span>${MN[m-1]} ${y}</span><button data-m="1">›</button></div></div>
   <div class="card"><b>Цель на месяц</b>${g?`<div class="pg"><i style="width:${Math.max(0,Math.min(100,cur.t/g*100))}%"></i></div><div>${money(cur.t)} из ${money(g)} · ${cur.t>=g?'цель достигнута 🎉':'осталось '+money(g-cur.t)}</div>`:'<div style="color:var(--mut)">Цель не задана</div>'}<button class="wide" id="goal" style="margin-top:10px">${g?'Изменить цель':'Поставить цель'}</button></div>
@@ -248,7 +248,7 @@ function viewS(){const cur=calc(mo),[y,m]=mo.split('-').map(Number),pv=calc(iso(
 async function exportCsv(){const dl=await claude.use('downloads');if(!dl)return alert('Выгрузка здесь недоступна');
   const dn=iso(now),q=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^(\d+)\.(\d+)$/,'$1,$2')+'"',rows=[['Дата','Тип','Описание','Сумма чека','Начислено']];
   R.filter(r=>r.date.startsWith(mo)).forEach(r=>rows.push([r.date,r.amount<0?'Возврат':'Чек',r.note||'',r.amount,r.e]));
-  D.filter(x=>x.w&&x.id.startsWith(mo)&&x.id<=dn).forEach(x=>rows.push([x.id,'Рабочий день','','',x.p]));
+  D.filter(x=>x.w&&x.id.startsWith(mo)).forEach(x=>rows.push([x.id,'Рабочий день','','',x.p]));
   J.filter(x=>x.date.startsWith(mo)).forEach(x=>rows.push([x.date,KN[x.k],x.note||'','',x.a]));
   rows.sort((a,b)=>String(a[0]).localeCompare(String(b[0])));rows.splice(0,0,rows.pop());rows.push(['','','ИТОГО','',calc(mo).t]);
   try{await dl.save({filename:'zarplata-'+mo+'.csv',data:'\ufeff'+rows.map(r=>r.map(q).join(';')).join('\r\n')})}catch(e){alert('Не удалось сохранить файл')}}
@@ -285,5 +285,15 @@ document.addEventListener('click',async e=>{
   try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}}catch(x){if(x.name==='AbortError')return}
   const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove()}
  if(e.target.closest('#rs')){const i=document.createElement('input');i.type='file';i.accept='.json,application/json';i.onchange=async()=>{try{const j=JSON.parse(await i.files[0].text());if(!j.d)throw 0;if(!confirm('Заменить все данные данными из копии?'))return;Object.entries(j.d).forEach(([k,v])=>localStorage.setItem(k,v));location.reload()}catch(x){alert('Неверный файл копии')}};i.click()}});
+</script>
+<script>
+$('#cam').onclick=()=>$('#file').click();
+$('#file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+ $('#st').textContent='⏳ Читаю чек… в первый раз дольше (загружается словарь)';
+ try{if(!window.Tesseract)await new Promise((ok,no)=>{const t=document.createElement('script');t.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';t.onload=ok;t.onerror=no;document.head.appendChild(t)});
+  const b=await createImageBitmap(f),k=Math.min(2,1800/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*k;c.height=b.height*k;const x=c.getContext('2d');x.drawImage(b,0,0,c.width,c.height);
+  const im=x.getImageData(0,0,c.width,c.height),d=im.data;for(let i=0;i<d.length;i+=4){let g=.3*d[i]+.59*d[i+1]+.11*d[i+2];g=Math.max(0,Math.min(255,(g-128)*1.6+128));d[i]=d[i+1]=d[i+2]=g}x.putImageData(im,0,0);
+  const r=await Tesseract.recognize(c,'rus+eng'),sc=$('#scan');sc.hidden=false;sc.value=r.data.text;sc.dispatchEvent(new Event('input'))}
+ catch(err){$('#st').textContent='Не удалось прочитать. Проверьте интернет или введите сумму вручную'}};
 </script>
 </body></html>
