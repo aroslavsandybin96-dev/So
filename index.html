@@ -73,6 +73,13 @@ input,select,textarea{width:100%;font:inherit;color:var(--tx);background:var(--b
 .kv{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--ln);font-size:15px}.kv:last-child{border:0}
 .chips{display:flex;gap:6px;overflow-x:auto;margin:6px 0 10px;padding-bottom:2px}.chips button{border:0;background:var(--card);color:var(--mut);padding:7px 13px;border-radius:99px;font-weight:600;font-size:13px;white-space:nowrap;box-shadow:var(--sh)}.chips button.on{background:var(--ac);color:#fff}
 .tile{flex:1;background:var(--card);border-radius:18px;padding:12px;box-shadow:var(--sh);text-align:center}.tile b{display:block;font-size:20px}.tile span{font-size:12px;color:var(--mut)}
+.sw{position:relative;overflow:hidden;border-radius:18px;margin-bottom:8px}
+.sw-in{position:relative;z-index:1;background:var(--bg);border-radius:18px;transition:transform .25s cubic-bezier(.2,.9,.3,1);touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.sw-in>.row,.sw-in>.card{margin-bottom:0}
+.sw-act{position:absolute;right:0;top:0;bottom:0;width:96px;display:flex;z-index:0}
+.sw-act button{flex:1;border:0;background:var(--bad);color:#fff;font-weight:700;border-radius:0 18px 18px 0;font-size:15px}
+.undo{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));background:var(--tx);color:var(--bg);border-radius:18px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;z-index:60;box-shadow:var(--sh);animation:up .3s cubic-bezier(.2,.9,.3,1)}
+.undo button{border:0;background:none;color:var(--ac);font-weight:800;font-size:15px;padding:6px 4px}
 @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @keyframes fade{from{opacity:0}}
 @keyframes up{from{transform:translateY(100%)}}
@@ -201,6 +208,7 @@ function render(){
   else if(tab==='a') app.innerHTML=viewAdmin();
   $('#fab').hidden = !(tab==='c'||tab==='o'||tab==='p'||tab==='n');
   $('#fab').textContent = tab==='p'?'📦':tab==='n'?'✎':'＋';
+  enhance();
 }
 
 function monthNav(){
@@ -243,10 +251,11 @@ function viewNotes(){
 
 function viewSupplies(){
   if(!S.sup.length) return '<div class="empty">Поставок нет. Нажмите 📦, чтобы создать</div>';
-  return S.sup.map(s=>{
-    const bs=S.boxes.filter(b=>b.supply_id===s.id), done=bs.filter(b=>b.status==='unpacked').length;
-    return `<div class="card" data-act="opensup" data-id="${s.id}" style="cursor:pointer">
-      <div style="display:flex;justify-content:space-between"><b>${esc(s.supplier)||'Поставка'}</b><span style="color:var(--mut)">${dm(s.delivery_date)}</span></div>
+  const list=S.sup.slice().sort((x,y)=>(x.status==='closed')-(y.status==='closed')||y.delivery_date.localeCompare(x.delivery_date));
+  return list.map(s=>{
+    const bs=S.boxes.filter(b=>b.supply_id===s.id), done=bs.filter(b=>b.status==='unpacked').length, closed=s.status==='closed';
+    return `<div class="card" data-act="opensup" data-id="${s.id}" style="cursor:pointer;${closed?'opacity:.6':''}">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(s.supplier)||'Поставка'}</b><span style="color:var(--mut)">${dm(s.delivery_date)}${closed?' · завершена':''}</span></div>
       <div class="pg"><i style="width:${bs.length?done/bs.length*100:0}%"></i></div>
       <div style="font-size:13px;color:var(--mut)">коробок: ${bs.length} · разобрано: ${done}</div></div>`;
   }).join('');
@@ -413,24 +422,127 @@ function formBox(supId){
   <div class="msg" id="f_msg"></div>
   <div class="btns"><button class="sc" data-act="closesheet">Отмена</button><button class="pri" data-act="savebox" data-id="${supId}">Добавить</button></div>`;
 }
+function swipeWrap(kind,id,inner){
+  return `<div class="sw" data-swipe="${kind}" data-id="${id}"><div class="sw-act"><button data-act="swdel" data-kind="${kind}" data-id="${id}">Удалить</button></div><div class="sw-in">${inner}</div></div>`;
+}
 function openSupply(id){
   const s=S.sup.find(x=>x.id===id); if(!s) return;
-  const bs=S.boxes.filter(b=>b.supply_id===id);
-  const rows=bs.map(b=>{
+  const bs=S.boxes.filter(b=>b.supply_id===id), closed=s.status==='closed';
+  const boxes=bs.map(b=>{
     const mism=b.counted!=null&&b.expected!=null&&+b.counted!==+b.expected;
     const st={pending:'⬜ не проверена',checked:mism?'⚠️ не сходится':'🟡 проверена',unpacked:'✅ разобрана'}[b.status];
-    return `<div class="card" style="margin:8px 0">
+    const inner=`<div class="card" style="margin:0">
       <div style="font-weight:700">${esc(b.label)}</div>
       <div style="font-size:13px;color:var(--mut)">по надписи: ${b.expected??'—'} · посчитано: ${b.counted??'—'} · ${st}</div>
       ${mism?'<div class="warn">Количество не совпадает с надписью</div>':''}
       <div class="btns" style="margin-top:8px">
-        <button class="sc" data-act="count" data-id="${b.id}">📷 Фото и счёт</button>
+        ${closed?'':`<button class="sc" data-act="count" data-id="${b.id}">📷 Фото и счёт</button>`}
         ${b.photo_path?`<button class="sc" data-act="viewphoto" data-id="${b.id}">Фото</button>`:''}
-        ${b.status==='checked'?`<button class="pri" data-act="unpack" data-id="${b.id}" data-mism="${mism?1:0}">Разобрана</button>`:''}
-      </div></div>`; }).join('')||'<div class="empty">Коробок пока нет</div>';
-  openSheet(`<h3>${esc(s.supplier)||'Поставка'} · ${dm(s.delivery_date)}</h3>${rows}
-    <button class="wide" data-act="newbox" data-id="${id}">＋ Коробка</button>
-    <div class="btns"><button class="sc" data-act="closesheet">Закрыть</button></div>`);
+        ${b.status==='checked'&&!closed?`<button class="pri" data-act="unpack" data-id="${b.id}" data-mism="${mism?1:0}">Разобрана</button>`:''}
+      </div></div>`;
+    return swipeWrap('box',b.id,inner);
+  }).join('')||'<div class="empty">Коробок пока нет</div>';
+  openSheet(`<h3>${esc(s.supplier)||'Поставка'} · ${dm(s.delivery_date)}${closed?' · завершена':''}</h3>
+    ${boxes}
+    ${closed?'':`<button class="wide" data-act="newbox" data-id="${id}">＋ Коробка</button>`}
+    <div class="btns">${closed
+      ?`<button class="sc" data-act="supreopen" data-id="${id}">Вернуть в работу</button>`
+      :`<button class="pri" data-act="supdone" data-id="${id}">Завершить поставку</button>`}</div>
+    <div class="btns"><button class="dl" data-act="supdel" data-id="${id}">Удалить поставку</button><button class="sc" data-act="closesheet">Закрыть</button></div>`);
+}
+
+/* ---------- swipe, long press, undo ---------- */
+let swipedAt=0, g=null, undoTimer=null, pendingCommit=null;
+const TABLE_OF={receipt:['receipts','c'],adj:['adjustments','adj'],order:['orders','ord'],supply:['supplies','sup'],box:['supply_boxes','boxes']};
+function findItem(kind,id){ const [,key]=TABLE_OF[kind]||[]; return key?S[key].find(x=>x.id===id):null; }
+function closeAllSwipes(){ document.querySelectorAll('.sw.open').forEach(w=>{ w.classList.remove('open'); w.querySelector('.sw-in').style.transform=''; }); }
+function enhance(){
+  document.querySelectorAll('[data-act="editr"],[data-act="edita"],[data-act="edito"],[data-act="opensup"]').forEach(el=>{
+    if(el.parentElement&&el.parentElement.classList.contains('sw-in')) return;
+    const kind={editr:'receipt',edita:'adj',edito:'order',opensup:'supply'}[el.dataset.act];
+    const wrap=document.createElement('div'); wrap.className='sw'; wrap.dataset.swipe=kind; wrap.dataset.id=el.dataset.id;
+    const inner=document.createElement('div'); inner.className='sw-in';
+    const act=document.createElement('div'); act.className='sw-act';
+    act.innerHTML=`<button data-act="swdel" data-kind="${kind}" data-id="${el.dataset.id}">Удалить</button>`;
+    el.parentNode.insertBefore(wrap,el); inner.appendChild(el); wrap.appendChild(act); wrap.appendChild(inner);
+  });
+}
+document.addEventListener('pointerdown',e=>{
+  const w=e.target.closest('.sw'); if(!w||e.target.closest('.sw-act')) return;
+  g={w,x:e.clientX,y:e.clientY,dx:0,lock:null,fired:false};
+  g.hold=setTimeout(()=>{ if(g&&g.w===w&&!g.lock){ g.fired=true; swipedAt=Date.now(); navigator.vibrate&&navigator.vibrate(15); openActions(w.dataset.swipe,w.dataset.id); } },450);
+},{passive:true});
+document.addEventListener('pointermove',e=>{
+  if(!g) return;
+  const dx=e.clientX-g.x, dy=e.clientY-g.y;
+  if(!g.lock&&(Math.abs(dx)>8||Math.abs(dy)>8)){ g.lock=Math.abs(dx)>Math.abs(dy)?'x':'y'; clearTimeout(g.hold); }
+  if(g.lock==='x'){
+    const base=g.w.classList.contains('open')?-96:0;
+    const v=Math.min(0,Math.max(-110,base+dx)); g.dx=v;
+    const inn=g.w.querySelector('.sw-in'); inn.style.transition='none'; inn.style.transform=`translateX(${v}px)`;
+    closeOthers(g.w);
+  }
+},{passive:true});
+function closeOthers(keep){ document.querySelectorAll('.sw.open').forEach(w=>{ if(w!==keep){ w.classList.remove('open'); w.querySelector('.sw-in').style.transform=''; } }); }
+function endGesture(){
+  if(!g) return; clearTimeout(g.hold);
+  if(g.lock==='x'){
+    const inn=g.w.querySelector('.sw-in'); inn.style.transition='';
+    const open=g.dx<-48;
+    g.w.classList.toggle('open',open); inn.style.transform=open?'translateX(-96px)':'';
+    swipedAt=Date.now();
+  }
+  g=null;
+}
+document.addEventListener('pointerup',endGesture);
+document.addEventListener('pointercancel',endGesture);
+
+function toastUndo(text,onUndo,commit){
+  flushPending();
+  pendingCommit=commit;
+  const d=document.createElement('div'); d.id='undo'; d.className='undo';
+  d.innerHTML=`<span>${esc(text)}</span><button>Отменить</button>`;
+  document.body.appendChild(d);
+  d.querySelector('button').onclick=async()=>{ clearTimeout(undoTimer); pendingCommit=null; d.remove(); await reload(); render(); };
+  undoTimer=setTimeout(flushPending,5000);
+}
+async function flushPending(){
+  if(!pendingCommit) return;
+  const p=pendingCommit; pendingCommit=null; clearTimeout(undoTimer);
+  document.getElementById('undo')?.remove();
+  try{ await p(); }catch(e){ alert('Не удалилось: '+(e.message||e)); }
+  await reload(); render();
+}
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) flushPending(); });
+
+async function deleteRecord(kind,id){
+  closeAllSwipes();
+  const [table,key]=TABLE_OF[kind]; const item=S[key].find(x=>x.id===id); if(!item) return;
+  const label={receipt:'Чек '+money(item.amount),adj:'Начисление '+money(item.amount),order:'Заказ «'+item.title+'»',supply:'Поставка «'+(item.supplier||'без названия')+'»',box:'Коробка «'+item.label+'»'}[kind];
+  const removedBoxes=kind==='supply'?S.boxes.filter(b=>b.supply_id===id):[];
+  S[key]=S[key].filter(x=>x.id!==id);
+  if(kind==='supply') S.boxes=S.boxes.filter(b=>b.supply_id!==id);
+  render();
+  toastUndo(label+' удалён',null,async()=>{
+    if(kind==='supply'){
+      const {error}=await sb.from('supplies').delete().eq('id',id); if(error) throw error;
+      const photos=removedBoxes.map(b=>b.photo_path).filter(Boolean);
+      if(photos.length) await sb.storage.from('supply-photos').remove(photos);
+    }else{
+      const {error}=await sb.from(table).delete().eq('id',id); if(error) throw error;
+    }
+    await log('Удалено: '+label,'');
+  });
+}
+function openActions(kind,id){
+  let rows;
+  if(kind==='receipt') rows=[['editr','Изменить'],['swdel','Удалить чек',1]];
+  else if(kind==='adj') rows=[['edita','Изменить'],['swdel','Удалить',1]];
+  else if(kind==='order') rows=[['edito','Изменить'],['swdel','Удалить заказ',1]];
+  else if(kind==='supply'){ const s=S.sup.find(x=>x.id===id); rows=[['opensup','Открыть'],s&&s.status==='closed'?['supreopen','Вернуть в работу']:['supdone','Завершить поставку'],['swdel','Удалить поставку',1]]; }
+  else if(kind==='box') rows=[['swdel','Удалить коробку',1]];
+  else return;
+  openSheet(`<h3>Действия</h3>${rows.map(([a,l,d])=>`<button class="wide" style="${d?'color:var(--bad)':''}" data-act="${a}" data-id="${id}" data-kind="${kind}">${l}</button>`).join('')}<div class="btns"><button class="sc" data-act="closesheet">Отмена</button></div>`);
 }
 
 /* ---------- actions ---------- */
@@ -450,7 +562,10 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{ if(e.target.id==='f_ret') e.target.dispatchEvent(new Event('input',{bubbles:true})); });
 
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-act]'); if(!t) return;
+  if(Date.now()-swipedAt<350){ return; }
+  const t=e.target.closest('[data-act]');
+  if(!t){ closeAllSwipes(); return; }
+  if(t.dataset.act!=='swdel') closeOthers(t.closest('.sw'));
   if(t.id==='drawer'&&e.target!==t) return;
   const act=t.dataset.act, id=t.dataset.id;
   const err=m=>{ const el=$('#f_msg'); if(el) el.textContent=m; };
@@ -552,6 +667,13 @@ document.addEventListener('click',async e=>{
       case 'closesheet': closeSheet(); break;
       case 'key': pressKey(t.dataset.k); render(); break;
       case 'xls': await exportCsv(); break;
+      case 'swdel': { const item=findItem(t.dataset.kind,id); const supId=item&&item.supply_id; closeSheet(); await deleteRecord(t.dataset.kind,id); if(t.dataset.kind==='box'&&supId&&S.sup.some(x=>x.id===supId)) openSupply(supId); break; }
+      case 'supdel': { closeSheet(); await deleteRecord('supply',id); break; }
+      case 'supdone': case 'supreopen': {
+        const st=act==='supdone'?'closed':'open', sup=S.sup.find(x=>x.id===id);
+        const {error}=await sb.from('supplies').update({status:st}).eq('id',id); if(error) throw error;
+        await log(st==='closed'?'Поставка завершена':'Поставка снова в работе',sup?.supplier||'');
+        await reload(); render(); if($('#ov').classList.contains('on')) openSupply(id); break; }
       case 'admf': adm.f=t.dataset.v; render(); break;
       case 'admw': adm.who=t.dataset.v; render(); break;
       case 'csvpeople': {
