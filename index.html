@@ -70,6 +70,7 @@ input,select,textarea{width:100%;font:inherit;color:var(--tx);background:var(--b
 .on-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#aaa;margin-right:8px}
 .on-dot.y{background:#2ecc71;animation:pulse 1.6s infinite}
 .warn{color:var(--bad);font-weight:700;font-size:13px}
+.noanim .card,.noanim .row,.noanim .hero,.noanim .sw-in,.noanim .cal{animation:none!important}
 .kv{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--ln);font-size:15px}.kv:last-child{border:0}
 .chips{display:flex;gap:6px;overflow-x:auto;margin:6px 0 10px;padding-bottom:2px}.chips button{border:0;background:var(--card);color:var(--mut);padding:7px 13px;border-radius:99px;font-weight:600;font-size:13px;white-space:nowrap;box-shadow:var(--sh)}.chips button.on{background:var(--ac);color:#fff}
 .tile{flex:1;background:var(--card);border-radius:18px;padding:12px;box-shadow:var(--sh);text-align:center}.tile b{display:block;font-size:20px}.tile span{font-size:12px;color:var(--mut)}
@@ -112,6 +113,10 @@ const dm=s=>s.slice(8)+'.'+s.slice(5,7);
 let sb,me=null,role='worker',myName='',tab='c',mo=iso(new Date()).slice(0,7),today=iso(new Date());
 let S={c:[],wd:[],adj:[],ord:[],notes:[],sup:[],boxes:[],aud:[],pres:[],prof:[]};
 let calc={e:'',show:'0'};
+let viewUser=null;
+function U(){ if(role!=='admin') return me.id; if(viewUser===null) return me.id; return viewUser==='all'?null:viewUser; }
+function own(x){ const u=U(); return !u||x.created_by===u; }
+function ownerId(){ return U()||me.id; }
 let beatTimer=null;
 
 function toast(t){ $('#app').insertAdjacentHTML('afterbegin',`<div class="msg" style="color:var(--ok)">${esc(t)}</div>`); setTimeout(()=>document.querySelector('.msg')?.remove(),2500); }
@@ -162,6 +167,7 @@ async function reload(){
     sb.from('profiles').select('id,name,role')]);
   const bad=[c,wd,adj,ord,nt,sup,bx,prof].find(r=>r.error);
   if(bad) throw bad.error;
+  const mine=prof.data.find(p=>p.id===me.id); if(mine){ role=mine.role; myName=mine.name; }
   Object.assign(S,{c:c.data,wd:wd.data,adj:adj.data,ord:ord.data,notes:nt.data,sup:sup.data,boxes:bx.data,prof:prof.data});
   if(role==='admin'){
     const [a,p]=await Promise.all([
@@ -191,7 +197,7 @@ function openMenu(){ $('#menu').innerHTML=menuHtml(); $('#drawer').classList.add
 function closeMenu(){ $('#drawer').classList.remove('on'); }
 
 function calc_(k){
-  const rs=S.c.filter(r=>r.date.startsWith(k)), wd=S.wd.filter(w=>w.date.startsWith(k)), ad=S.adj.filter(a=>a.date.startsWith(k));
+  const rs=S.c.filter(r=>r.date.startsWith(k)&&own(r)), wd=S.wd.filter(w=>w.date.startsWith(k)&&own(w)), ad=S.adj.filter(a=>a.date.startsWith(k)&&own(a));
   const sales=rs.reduce((s,r)=>s+ +r.amount,0), e=rs.reduce((s,r)=>s+ +r.earn,0);
   const base=wd.reduce((s,w)=>s+ +w.pay,0), adj=ad.reduce((s,a)=>s+(a.kind==='fine'?-1:1)*+a.amount,0);
   return {rs,wd,ad,sales,e,base,adj,total:e+base+adj};
@@ -199,6 +205,7 @@ function calc_(k){
 
 function render(){
   const app=$('#app');
+  const same=app.dataset.tab===tab; app.dataset.tab=tab; app.classList.toggle('noanim',same);
   if(tab==='c') app.innerHTML=viewReceipts();
   else if(tab==='o') app.innerHTML=viewOrders();
   else if(tab==='p') app.innerHTML=viewSupplies();
@@ -212,11 +219,13 @@ function render(){
 }
 
 function monthNav(){
-  return `<div class="mn"><button data-act="mon" data-d="-1">‹</button><b>${MN[+mo.slice(5)-1]} ${mo.slice(0,4)}</b><button data-act="mon" data-d="1">›</button></div>`;
+  const cur=viewUser??me.id;
+  const pb=role==='admin'?`<div class="chips">${[[me.id,'Я'],...S.prof.filter(p=>p.id!==me.id).map(p=>[p.id,p.name]),['all','Все']].map(([k,l])=>`<button data-act="uview" data-v="${k}" class="${cur===k?'on':''}">${esc(l)}</button>`).join('')}</div>`:'';
+  return pb+`<div class="mn"><button data-act="mon" data-d="-1">‹</button><b>${MN[+mo.slice(5)-1]} ${mo.slice(0,4)}</b><button data-act="mon" data-d="1">›</button></div>`;
 }
 
 function viewReceipts(){
-  const c=calc_(mo), wdSet=new Set(S.wd.map(w=>w.date)), rcDays=new Set(S.c.map(r=>r.date));
+  const c=calc_(mo), wdSet=new Set(S.wd.filter(own).map(w=>w.date)), rcDays=new Set(S.c.filter(own).map(r=>r.date));
   const [y,m]=mo.split('-').map(Number), dim=new Date(y,m,0).getDate(), first=(new Date(y,m-1,1).getDay()+6)%7;
   let g='<div class="wk">'+['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d=>`<span>${d}</span>`).join('')+'</div><div class="gd">'+'<i></i>'.repeat(first);
   for(let d=1;d<=dim;d++){ const id=mo+'-'+pad(d); g+=`<button data-act="day" data-d="${id}" class="${wdSet.has(id)?'w':''} ${id===today?'t':''}">${d}${rcDays.has(id)?'<u></u>':''}</button>`; }
@@ -233,7 +242,7 @@ function viewReceipts(){
 }
 
 function viewOrders(){
-  const td=today, L=S.ord.slice().sort((a,b)=>(a.done-b.done)||(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+  const td=today, L=S.ord.filter(own).slice().sort((a,b)=>(a.done-b.done)||(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
   if(!L.length) return '<div class="empty">Заказов нет. Нажмите ＋</div>';
   return L.map(o=>{ const late=!o.done&&o.date<td; return `<div class="row" style="${o.done?'opacity:.5':''}">
     <button class="dot" data-act="odone" data-id="${o.id}" style="border:0">${o.done?'✅':'⬜'}</button>
@@ -243,15 +252,15 @@ function viewOrders(){
 }
 
 function viewNotes(){
-  const L=S.notes.filter(n=>n.month===mo);
+  const L=S.notes.filter(n=>n.month===mo&&own(n));
   return `${monthNav()}<div class="sec"><span>Заметки за ${MN[+mo.slice(5)-1]}</span></div>`+
     (L.map(n=>`<div class="card" style="display:flex;gap:10px;align-items:start"><div style="flex:1;white-space:pre-wrap">${esc(n.text)}</div>${n.created_by===me.id||role==='admin'?`<button data-act="delnote" data-id="${n.id}" style="border:0;background:none;color:var(--bad)">✕</button>`:''}</div>`).join('')||'<div class="empty">Заметок за этот месяц нет</div>')+
     `<div style="font-size:12px;color:var(--mut);text-align:center">Заметки привязаны к месяцу: в новом месяце список начнётся заново, старые остаются в своём месяце.</div>`;
 }
 
 function viewSupplies(){
-  if(!S.sup.length) return '<div class="empty">Поставок нет. Нажмите 📦, чтобы создать</div>';
-  const list=S.sup.slice().sort((x,y)=>(x.status==='closed')-(y.status==='closed')||y.delivery_date.localeCompare(x.delivery_date));
+  if(!S.sup.filter(own).length) return '<div class="empty">Поставок нет. Нажмите 📦, чтобы создать</div>';
+  const list=S.sup.filter(own).slice().sort((x,y)=>(x.status==='closed')-(y.status==='closed')||y.delivery_date.localeCompare(x.delivery_date));
   return list.map(s=>{
     const bs=S.boxes.filter(b=>b.supply_id===s.id), done=bs.filter(b=>b.status==='unpacked').length, closed=s.status==='closed';
     return `<div class="card" data-act="opensup" data-id="${s.id}" style="cursor:pointer;${closed?'opacity:.6':''}">
@@ -550,7 +559,7 @@ async function save(table,payload,id,label){
   const q=id?sb.from(table).update(payload).eq('id',id):sb.from(table).insert(payload);
   const {error}=await q;
   if(error) throw error;
-  await log((id?'Изменено: ':'Добавлено: ')+label, JSON.stringify(payload).slice(0,160));
+  log((id?'Изменено: ':'Добавлено: ')+label, JSON.stringify(payload).slice(0,160));
 }
 
 document.addEventListener('input',e=>{
@@ -585,10 +594,16 @@ document.addEventListener('click',async e=>{
         await enter(data.user); break; }
       case 'mon': { const [y,m]=mo.split('-').map(Number); mo=iso(new Date(y,m-1+ +t.dataset.d,1)).slice(0,7); render(); break; }
       case 'day': {
-        const ex=S.wd.find(w=>w.date===t.dataset.d);
-        if(ex){ const {error}=await sb.from('work_days').delete().eq('date',t.dataset.d); if(error) throw error; await log('Снят рабочий день',t.dataset.d); }
-        else { const {error}=await sb.from('work_days').insert({date:t.dataset.d,pay:DAY_PAY}); if(error) throw error; await log('Рабочий день',t.dataset.d+' · '+money(DAY_PAY)); }
-        await reload(); render(); break; }
+        const owner=ownerId(), d=t.dataset.d;
+        const ex=S.wd.find(w=>w.date===d&&w.created_by===owner);
+        const fail=({error})=>{ if(error){ alert(error.message); reload().then(render); } };
+        if(ex){ S.wd=S.wd.filter(w=>w!==ex); render();
+          sb.from('work_days').delete().eq('date',d).eq('created_by',owner).then(fail);
+          log('Снят рабочий день',d); }
+        else { const row={date:d,pay:DAY_PAY,created_by:owner}; S.wd.push(row); render();
+          sb.from('work_days').insert(row).then(fail);
+          log('Рабочий день',d+' · '+money(DAY_PAY)); }
+        break; }
       case 'newr': openSheet(formReceipt(null)); break;
       case 'editr': openSheet(formReceipt(S.c.find(r=>r.id===id))); break;
       case 'saver': {
@@ -596,8 +611,9 @@ document.addEventListener('click',async e=>{
         if(!(a>0)) return err('Введите сумму');
         const date=$('#f_date').value||today, neg=$('#f_ret').checked, amt=neg?-a:a;
         const row={date,amount:amt,rate:RATE,earn:Math.round(amt*RATE)/100,note:$('#f_note').value.trim()};
-        await save('receipts',row,id||null,'чек '+money(amt)+' ('+date+')');
-        if(!S.wd.some(w=>w.date===date)&&!id) await sb.from('work_days').insert({date,pay:DAY_PAY});
+        if(!id) row.created_by=ownerId();
+        closeSheet(); await save('receipts',row,id||null,'чек '+money(amt)+' ('+date+')');
+        if(!S.wd.some(w=>w.date===date&&w.created_by===ownerId())&&!id) await sb.from('work_days').insert({date,pay:DAY_PAY,created_by:ownerId()});
         closeSheet(); await reload(); render(); toast('Сохранено'); break; }
       case 'delr': { if(!confirm('Удалить чек?')) return; const r=S.c.find(x=>x.id===id); await sb.from('receipts').delete().eq('id',id); await log('Удалён чек',money(r?.amount)+' '+r?.date); closeSheet(); await reload(); render(); break; }
       case 'newa': openSheet(formAdj(null)); break;
@@ -605,33 +621,40 @@ document.addEventListener('click',async e=>{
       case 'savea': {
         const a=parseFloat(($('#f_amt').value||'').replace(',','.')); if(!(a>0)) return err('Введите сумму');
         const row={kind:$('#f_kind').value,amount:a,date:$('#f_date').value||today,note:$('#f_note').value.trim()};
-        await save('adjustments',row,id||null,KIND[row.kind]+' '+money(a));
+        if(!id) row.created_by=ownerId();
+        closeSheet(); await save('adjustments',row,id||null,KIND[row.kind]+' '+money(a));
         closeSheet(); await reload(); render(); break; }
       case 'dela': { if(!confirm('Удалить?')) return; const a=S.adj.find(x=>x.id===id); await sb.from('adjustments').delete().eq('id',id); await log('Удалено: '+KIND[a?.kind],money(a?.amount)); closeSheet(); await reload(); render(); break; }
-      case 'odone': { const o=S.ord.find(x=>x.id===id); await sb.from('orders').update({done:!o.done}).eq('id',id); await log(o.done?'Заказ снова в работе':'Заказ выполнен',o.title); await reload(); render(); break; }
+      case 'odone': {
+        const o=S.ord.find(x=>x.id===id); o.done=!o.done; render();
+        sb.from('orders').update({done:o.done}).eq('id',id).then(({error})=>{ if(error){ alert(error.message); reload().then(render); } });
+        log(o.done?'Заказ выполнен':'Заказ снова в работе',o.title); break; }
       case 'neww': case 'newo': openSheet(formOrder(null)); break;
       case 'edito': openSheet(formOrder(S.ord.find(o=>o.id===id))); break;
       case 'saveo': {
         const title=$('#f_title').value.trim(); if(!title) return err('Опишите заказ');
         const row={title,date:$('#f_date').value||today,time:$('#f_time').value||null,sum:parseFloat(($('#f_sum').value||'0').replace(',','.'))||0};
-        await save('orders',row,id||null,'заказ '+title);
+        if(!id) row.created_by=ownerId();
+        closeSheet(); await save('orders',row,id||null,'заказ '+title);
         closeSheet(); await reload(); render(); break; }
       case 'delo': { if(!confirm('Удалить заказ?')) return; const o=S.ord.find(x=>x.id===id); await sb.from('orders').delete().eq('id',id); await log('Удалён заказ',o?.title); closeSheet(); await reload(); render(); break; }
       case 'savenote': {
         const text=$('#f_text').value.trim(); if(!text) return err('Пустая заметка');
-        const {error}=await sb.from('notes').insert({month:mo,text}); if(error) throw error;
+        closeSheet(); const {error}=await sb.from('notes').insert({month:mo,text,created_by:ownerId()}); if(error) throw error;
         await log('Заметка '+mo,text.slice(0,80)); closeSheet(); await reload(); render(); break; }
       case 'delnote': { if(!confirm('Удалить заметку?')) return; await sb.from('notes').delete().eq('id',id); await log('Удалена заметка',''); await reload(); render(); break; }
       case 'newsup': case 'fab-sup': openSheet(formSupply()); break;
       case 'savesup': {
         const row={delivery_date:$('#f_date').value||today,supplier:$('#f_sup').value.trim()};
-        await save('supplies',row,null,'поставка '+(row.supplier||''));
+        row.created_by=ownerId();
+        closeSheet(); await save('supplies',row,null,'поставка '+(row.supplier||''));
         closeSheet(); await reload(); render(); break; }
       case 'opensup': openSupply(id); break;
       case 'newbox': openSheet(formBox(id)); break;
       case 'savebox': {
         const label=$('#f_label').value.trim(); if(!label) return err('Напишите надпись');
         const row={supply_id:id,label,expected:parseInt($('#f_exp').value)||null,status:'pending'};
+        row.created_by=(S.sup.find(x=>x.id===id)||{}).created_by||ownerId();
         await save('supply_boxes',row,null,'коробка '+label);
         await reload(); openSupply(id); break; }
       case 'count': {
@@ -655,9 +678,9 @@ document.addEventListener('click',async e=>{
         if(data?.signedUrl) window.open(data.signedUrl,'_blank'); break; }
       case 'unpack': {
         if(t.dataset.mism==='1'&&!confirm('Количество не совпадает с надписью. Всё равно отметить разобранной?')) return;
-        const b=S.boxes.find(x=>x.id===id);
-        await sb.from('supply_boxes').update({status:'unpacked'}).eq('id',id);
-        await log('Разобрана коробка',b.label); await reload(); openSupply(b.supply_id); break; }
+        const b=S.boxes.find(x=>x.id===id); b.status='unpacked'; render(); openSupply(b.supply_id);
+        sb.from('supply_boxes').update({status:'unpacked'}).eq('id',id).then(({error})=>{ if(error){ alert(error.message); reload().then(render); } });
+        log('Разобрана коробка',b.label); break; }
       case 'fab': {
         if(tab==='c') openSheet(formReceipt(null));
         else if(tab==='o') openSheet(formOrder(null));
@@ -671,11 +694,12 @@ document.addEventListener('click',async e=>{
       case 'supdel': { closeSheet(); await deleteRecord('supply',id); break; }
       case 'supdone': case 'supreopen': {
         const st=act==='supdone'?'closed':'open', sup=S.sup.find(x=>x.id===id);
-        const {error}=await sb.from('supplies').update({status:st}).eq('id',id); if(error) throw error;
-        await log(st==='closed'?'Поставка завершена':'Поставка снова в работе',sup?.supplier||'');
-        await reload(); render(); if($('#ov').classList.contains('on')) openSupply(id); break; }
+        sup.status=st; render(); if($('#ov').classList.contains('on')) openSupply(id);
+        sb.from('supplies').update({status:st}).eq('id',id).then(({error})=>{ if(error){ alert(error.message); reload().then(render); } });
+        log(st==='closed'?'Поставка завершена':'Поставка снова в работе',sup.supplier||''); break; }
       case 'admf': adm.f=t.dataset.v; render(); break;
       case 'admw': adm.who=t.dataset.v; render(); break;
+      case 'uview': viewUser=t.dataset.v; render(); break;
       case 'csvpeople': {
         const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
         const rows=[['Имя','Раб. дней','Чеков','Продажи','% с продаж','Оклад','Премии и штрафы','Итого']];
