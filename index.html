@@ -13,11 +13,11 @@
 :root[data-theme="dark"]{color-scheme:dark;--bg:#16101a;--card:#211826;--tx:#f5eaf0;--mut:#a592a0;--ac:#ff5c93;--ac2:#b8336a;--ok:#6fcf97;--bad:#ff7b6b;--ln:#33263a;--sh:0 8px 30px rgba(0,0,0,.4)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,"Segoe UI",Roboto,sans-serif}
-#app{max-width:520px;margin:0 auto;padding:64px 16px 40px}
+#app{max-width:520px;margin:0 auto;padding:calc(72px + env(safe-area-inset-top,0px)) 16px 40px}
 button{font:inherit;cursor:pointer}
-.bar{position:fixed;top:0;left:0;right:0;height:56px;display:flex;align-items:center;gap:12px;padding:0 14px;padding-top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5;border-bottom:1px solid var(--ln)}
+.bar{position:fixed;top:0;left:0;right:0;height:calc(56px + env(safe-area-inset-top,0px));display:flex;align-items:flex-end;gap:12px;padding:0 14px 8px;background:var(--bg);opacity:1;backdrop-filter:none;-webkit-backdrop-filter:none;z-index:50;border-bottom:1px solid var(--ln);transform:translateZ(0)}
 .bar h1{font-size:18px;margin:0;flex:1}
-.burger{width:40px;height:40px;border:0;border-radius:12px;background:var(--card);color:var(--tx);font-size:20px;box-shadow:var(--sh)}
+.burger{height:40px;padding:0 14px;border:0;border-radius:12px;background:var(--card);color:var(--tx);font-size:15px;font-weight:700;box-shadow:var(--sh);white-space:nowrap}
 .drawer{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:20}
 .drawer.on{display:block;animation:fade .2s}
 .menu{position:absolute;top:0;left:0;bottom:0;width:260px;background:var(--card);padding:calc(18px + env(safe-area-inset-top,0px)) 14px 18px;box-shadow:var(--sh);transform:translateX(-100%);transition:transform .3s cubic-bezier(.2,.9,.3,1)}
@@ -76,7 +76,7 @@ input,select,textarea{width:100%;font:inherit;color:var(--tx);background:var(--b
 @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(46,204,113,0)}100%{box-shadow:0 0 0 0 rgba(46,204,113,0)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
-<div class="bar" id="bar" hidden><button class="burger" data-act="menu" aria-label="Меню">☰</button><h1 id="title"></h1></div>
+<div class="bar" id="bar" hidden><button class="burger" data-act="menu" aria-label="Меню">☰ Меню</button><h1 id="title"></h1></div>
 <div class="drawer" id="drawer" data-act="closemenu"><div class="menu" id="menu"></div></div>
 <div id="app"><div class="empty">Загрузка…</div></div>
 <button class="fab" id="fab" data-act="fab" hidden aria-label="Добавить">＋</button>
