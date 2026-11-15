@@ -70,6 +70,9 @@ input,select,textarea{width:100%;font:inherit;color:var(--tx);background:var(--b
 .on-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#aaa;margin-right:8px}
 .on-dot.y{background:#2ecc71;animation:pulse 1.6s infinite}
 .warn{color:var(--bad);font-weight:700;font-size:13px}
+.kv{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--ln);font-size:15px}.kv:last-child{border:0}
+.chips{display:flex;gap:6px;overflow-x:auto;margin:6px 0 10px;padding-bottom:2px}.chips button{border:0;background:var(--card);color:var(--mut);padding:7px 13px;border-radius:99px;font-weight:600;font-size:13px;white-space:nowrap;box-shadow:var(--sh)}.chips button.on{background:var(--ac);color:#fff}
+.tile{flex:1;background:var(--card);border-radius:18px;padding:12px;box-shadow:var(--sh);text-align:center}.tile b{display:block;font-size:20px}.tile span{font-size:12px;color:var(--mut)}
 @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @keyframes fade{from{opacity:0}}
 @keyframes up{from{transform:translateY(100%)}}
@@ -272,17 +275,90 @@ function viewTotals(){
   <div style="font-size:12px;color:var(--mut)">Заказов в базе: ${g}</div>`;
 }
 
+let adm={f:'all',who:'all'};
+const FILTERS=[
+  ['all','Всё',()=>true],
+  ['chk','Чеки',a=>/чек/i.test(a.action)],
+  ['pay','Зарплата',a=>/рабоч|премия|штраф|чаев/i.test(a.action)],
+  ['ord','Заказы',a=>/заказ/i.test(a.action)],
+  ['sup','Поставки',a=>/поставк|коробк|разоб/i.test(a.action)],
+  ['acc','Вход и пароль',a=>/вход|пароль/i.test(a.action)]];
+const fdt=t=>new Date(t).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+
+function byPerson(k){
+  return S.prof.filter(p=>p.role==='worker').map(p=>{
+    const rs=S.c.filter(r=>r.date.startsWith(k)&&r.created_by===p.id);
+    const wd=S.wd.filter(w=>w.date.startsWith(k)&&w.created_by===p.id);
+    const ad=S.adj.filter(a=>a.date.startsWith(k)&&a.created_by===p.id);
+    const sales=rs.reduce((s,r)=>s+ +r.amount,0), e=rs.reduce((s,r)=>s+ +r.earn,0);
+    const base=wd.reduce((s,w)=>s+ +w.pay,0), adj=ad.reduce((s,a)=>s+(a.kind==='fine'?-1:1)*+a.amount,0);
+    return {p,rs,wd,sales,e,base,adj,total:e+base+adj};
+  });
+}
+
+function checks(){
+  const out=[], rs=S.c.filter(r=>r.date.startsWith(mo));
+  rs.filter(r=>Math.abs(+r.amount)>300000).forEach(r=>out.push(['⚠️','Крупный чек '+money(r.amount)+' · '+dm(r.date)+(r.note?' · '+r.note:'')]));
+  const seen={}; rs.forEach(r=>{const k=r.date+'|'+r.amount; seen[k]=(seen[k]||0)+1;});
+  Object.entries(seen).filter(([,n])=>n>1).forEach(([k,n])=>{const [d,a]=k.split('|'); out.push(['🔁','Возможный дубль: '+money(a)+' за '+dm(d)+' (×'+n+')']);});
+  const wdSet=new Set(S.wd.map(w=>w.date));
+  rs.filter(r=>!wdSet.has(r.date)).forEach(r=>out.push(['📅','Чек без рабочего дня: '+dm(r.date)+' · '+money(r.amount)]));
+  S.ord.filter(o=>!o.done&&o.date<today).forEach(o=>out.push(['⏰','Просрочен заказ: '+o.title+' ('+dm(o.date)+')']));
+  S.boxes.filter(b=>b.status==='checked'&&b.counted!=null&&b.expected!=null&&+b.counted!==+b.expected).forEach(b=>out.push(['📦','Не сходится: '+b.label+' — по надписи '+b.expected+', посчитано '+b.counted]));
+  S.boxes.filter(b=>b.status==='pending').forEach(b=>out.push(['📦','Коробка не проверена: '+b.label]));
+  return out;
+}
+
 function viewAdmin(){
   if(role!=='admin') return '<div class="empty">Нет доступа</div>';
-  const now2=Date.now();
+  const nowMs=Date.now(), todayRs=S.c.filter(r=>r.date===today);
   const workers=S.prof.filter(p=>p.role==='worker');
-  const cards=workers.map(w=>{ const pr=S.pres.find(p=>p.user_id===w.id); const on=pr&&(now2-new Date(pr.last_seen).getTime())<75000;
-    return `<div class="card"><span class="on-dot ${on?'y':''}"></span><b>${esc(w.name)}</b> — ${on?'онлайн · '+esc(pr.screen):(pr?'не в сети, была '+new Date(pr.last_seen).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'ещё не заходила')}</div>`; }).join('')||'<div class="card">Работников нет</div>';
-  const c=calc_(mo);
-  const log_=S.aud.slice(0,150).map(x=>`<div class="log"><b>${esc(x.action)}</b> ${esc(x.details)}<small>${esc(who(x.user_id))} · ${new Date(x.at).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</small></div>`).join('')||'<div class="empty">Записей нет</div>';
-  return `${monthNav()}${cards}
-    <div class="card"><b>${MN[+mo.slice(5)-1]}:</b> зарплата ${money(c.total)}, продажи ${money(c.sales)}, чеков ${c.rs.length}</div>
-    <div class="sec"><span>Журнал аудита</span></div><div class="card">${log_}</div>`;
+  const live=workers.map(w=>{
+    const pr=S.pres.find(p=>p.user_id===w.id), on=pr&&nowMs-new Date(pr.last_seen).getTime()<75000;
+    const tr=todayRs.filter(r=>r.created_by===w.id);
+    return `<div class="card"><div style="display:flex;align-items:center;gap:8px"><span class="on-dot ${on?'y':''}"></span><b style="flex:1">${esc(w.name)}</b><span style="font-size:12px;color:var(--mut)">${on?'онлайн':pr?'был '+fdt(pr.last_seen):'не заходила'}</span></div>
+      <div style="font-size:13px;color:var(--mut);margin-top:6px">${on?'Сейчас: '+esc(pr.screen)+' · ':''}сегодня чеков: ${tr.length} на ${money(tr.reduce((s,r)=>s+ +r.amount,0))}</div></div>`; }).join('')||'<div class="card">Работников нет</div>';
+
+  const tiles=`<div style="display:flex;gap:8px;margin:8px 0">
+    <div class="tile"><b>${todayRs.length}</b><span>чеков сегодня</span></div>
+    <div class="tile"><b>${money(todayRs.reduce((s,r)=>s+ +r.amount,0))}</b><span>продано сегодня</span></div>
+    <div class="tile"><b>${S.sup.filter(s=>S.boxes.some(b=>b.supply_id===s.id&&b.status!=='unpacked')).length}</b><span>поставок в работе</span></div></div>`;
+
+  const pers=byPerson(mo);
+  const perHtml=pers.map(x=>`<div class="card"><b>${esc(x.p.name)}</b> <span style="color:var(--mut)">· ${x.wd.length} раб. дн. · ${x.rs.length} чеков</span>
+    <div class="kv"><span>Продажи</span><b>${money(x.sales)}</b></div>
+    <div class="kv"><span>${RATE}% с продаж</span><b>${money(x.e)}</b></div>
+    <div class="kv"><span>Оклад</span><b>${money(x.base)}</b></div>
+    <div class="kv"><span>Премии и штрафы</span><b>${money(x.adj)}</b></div>
+    <div class="kv" style="font-size:17px"><span>Итого</span><b style="color:var(--ac)">${money(x.total)}</b></div></div>`).join('')||'';
+
+  const al=checks();
+  const alHtml=al.length?al.slice(0,25).map(([i,t])=>`<div class="row"><div class="dot">${i}</div><div class="l"><div style="white-space:normal;font-size:14px">${esc(t)}</div></div></div>`).join('')+(al.length>25?`<div class="empty" style="padding:6px">и ещё ${al.length-25}</div>`:''):'<div class="card" style="color:var(--ok);font-weight:600">Проблем за этот месяц не найдено ✓</div>';
+
+  const F=FILTERS.find(f=>f[0]===adm.f)||FILTERS[0];
+  const logs=S.aud.filter(x=>F[2](x)&&(adm.who==='all'||x.user_id===adm.who)).slice(0,150);
+  const chipsF=FILTERS.map(([k,l])=>`<button data-act="admf" data-v="${k}" class="${adm.f===k?'on':''}">${l}</button>`).join('');
+  const chipsW=[['all','Все'],...S.prof.map(p=>[p.id,p.name])].map(([k,l])=>`<button data-act="admw" data-v="${k}" class="${adm.who===k?'on':''}">${esc(l)}</button>`).join('');
+  const logHtml=logs.map(x=>`<div class="log"><b>${esc(x.action)}</b> ${esc(x.details)}<small>${esc(who(x.user_id))} · ${fdt(x.at)}</small></div>`).join('')||'<div class="empty">Записей нет</div>';
+
+  return `${monthNav()}
+  <div class="sec"><span>Сейчас</span></div>${tiles}${live}
+  <div class="sec"><span>Проверки за ${MN[+mo.slice(5)-1]}</span><span>${al.length}</span></div>${alHtml}
+  <div class="sec"><span>Итоги по людям</span></div>${perHtml||'<div class="card">Нет данных</div>'}
+  <div class="sec"><span>Журнал</span></div>
+  <div class="chips">${chipsF}</div>
+  <div class="chips">${chipsW}</div>
+  <div class="card">${logHtml}</div>
+  <div class="sec"><span>Инструменты</span></div>
+  <button class="wide" data-act="csvpeople">📊 Сводка по людям за месяц (CSV)</button>
+  <button class="wide" data-act="backup">💾 Копия всех данных (файл JSON)</button>
+  <div style="font-size:12px;color:var(--mut);text-align:center">Фото коробок в копию не входят: они лежат в хранилище Supabase.</div>`;
+}
+
+function download(name,text,type){
+  const blob=new Blob([text],{type:type||'text/plain;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 /* ---------- forms ---------- */
@@ -390,6 +466,7 @@ document.addEventListener('click',async e=>{
         $('#lm').textContent='Входим…';
         const {data,error}=await sb.auth.signInWithPassword({email:em,password:pw});
         if(error){ $('#lm').textContent='Неверный логин или пароль'; break; }
+        await sb.from('audit').insert({action:'Вход',details:em});
         await enter(data.user); break; }
       case 'mon': { const [y,m]=mo.split('-').map(Number); mo=iso(new Date(y,m-1+ +t.dataset.d,1)).slice(0,7); render(); break; }
       case 'day': {
@@ -475,6 +552,17 @@ document.addEventListener('click',async e=>{
       case 'closesheet': closeSheet(); break;
       case 'key': pressKey(t.dataset.k); render(); break;
       case 'xls': await exportCsv(); break;
+      case 'admf': adm.f=t.dataset.v; render(); break;
+      case 'admw': adm.who=t.dataset.v; render(); break;
+      case 'csvpeople': {
+        const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+        const rows=[['Имя','Раб. дней','Чеков','Продажи','% с продаж','Оклад','Премии и штрафы','Итого']];
+        byPerson(mo).forEach(x=>rows.push([x.p.name,x.wd.length,x.rs.length,x.sales,x.e,x.base,x.adj,x.total]));
+        download('svodka-'+mo+'.csv','\ufeff'+rows.map(r=>r.map(q).join(';')).join('\r\n'),'text/csv;charset=utf-8'); break; }
+      case 'backup': {
+        const data={exported:new Date().toISOString(),receipts:S.c,work_days:S.wd,adjustments:S.adj,orders:S.ord,notes:S.notes,supplies:S.sup,supply_boxes:S.boxes,profiles:S.prof};
+        download('zarplata-backup-'+today+'.json',JSON.stringify(data,null,2),'application/json');
+        await log('Выгрузка копии данных',''); break; }
     }
   }catch(ex){ alert('Ошибка: '+(ex.message||ex)); }
 });
